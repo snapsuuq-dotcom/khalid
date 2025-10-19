@@ -7,6 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatsCard } from "@/components/stats-card";
 import { Package, Truck, CheckCircle, Clock } from "lucide-react";
 import { STATUS_LABELS, type Cargo } from "@shared/schema";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+} from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
@@ -50,6 +57,43 @@ export default function AdminDashboard() {
         <StatsCard title="In Transit" value={(stats?.on_air ?? 0) + (stats?.on_sea ?? 0)} icon={Truck} />
         <StatsCard title="Delivered" value={stats?.delivered ?? 0} icon={CheckCircle} />
       </div>
+
+      {stats && (
+        <Card>
+          <CardContent className="p-4">
+            <ChartContainer
+              config={{
+                china: { label: "China", color: "hsl(var(--chart-1))" },
+                on_air: { label: "On Air", color: "hsl(var(--chart-3))" },
+                on_sea: { label: "On Sea", color: "hsl(var(--chart-4))" },
+                arrived: { label: "Arrived", color: "hsl(var(--chart-1))" },
+                delivered: { label: "Delivered", color: "hsl(var(--chart-2))" },
+              }}
+            >
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={[{
+                  name: "Cargo",
+                  china: stats.china,
+                  on_air: stats.on_air,
+                  on_sea: stats.on_sea,
+                  arrived: stats.arrived,
+                  delivered: stats.delivered,
+                }]}>
+                  <XAxis dataKey="name" hide />
+                  <YAxis allowDecimals={false} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend />
+                  <Bar dataKey="china" fill="var(--color-china)" />
+                  <Bar dataKey="on_air" fill="var(--color-on_air)" />
+                  <Bar dataKey="on_sea" fill="var(--color-on_sea)" />
+                  <Bar dataKey="arrived" fill="var(--color-arrived)" />
+                  <Bar dataKey="delivered" fill="var(--color-delivered)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">
