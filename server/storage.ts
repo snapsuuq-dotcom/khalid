@@ -49,6 +49,7 @@ class MongoStorage implements IStorage {
   private client: MongoClient;
   private db!: Db;
   private cargoCol!: Collection<CargoDoc>;
+  private initialized = false;
 
   constructor(uri: string, dbName: string) {
     this.client = new MongoClient(uri);
@@ -56,17 +57,18 @@ class MongoStorage implements IStorage {
   }
 
   private async ensureConnected() {
-    if (!this.client.topology?.isConnected()) {
+    if (!this.initialized) {
       await this.client.connect();
-    }
-    if (!this.db) {
       const dbName = process.env.MONGO_DB || "trucknumber";
       this.db = this.client.db(dbName);
       this.cargoCol = this.db.collection<CargoDoc>("cargo");
-      await this.cargoCol.createIndex({ truckNumber: 1 });
-      await this.cargoCol.createIndex({ phoneNumber: 1 });
-      await this.cargoCol.createIndex({ customerName: 1 });
-      await this.cargoCol.createIndex({ status: 1, date: -1 });
+      await Promise.all([
+        this.cargoCol.createIndex({ truckNumber: 1 }),
+        this.cargoCol.createIndex({ phoneNumber: 1 }),
+        this.cargoCol.createIndex({ customerName: 1 }),
+        this.cargoCol.createIndex({ status: 1, date: -1 }),
+      ]);
+      this.initialized = true;
     }
   }
 
