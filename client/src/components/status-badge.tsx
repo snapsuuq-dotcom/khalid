@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS, STATUS_COLORS, type ShipmentStatus } from "@shared/schema";
+import { STATUS_LABELS, STATUS_COLORS, type CargoStatus } from "@shared/schema";
 
 interface StatusBadgeProps {
-  status: ShipmentStatus;
+  status: CargoStatus;
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
