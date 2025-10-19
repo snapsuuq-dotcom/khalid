@@ -1,86 +1,125 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertShipmentSchema, insertStatusUpdateSchema } from "@shared/schema";
+import { insertCargoSchema } from "@shared/schema";
+import session from "express-session";
+import MemoryStoreFactory from "memorystore";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.get("/api/shipments", async (req, res) => {
+  const MemoryStore = MemoryStoreFactory(session);
+
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "dev-secret",
+      resave: false,
+      saveUninitialized: false,
+      store: new MemoryStore({ checkPeriod: 1000 * 60 * 60 }),
+      cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+        secure: false,
+      },
+    }),
+  );
+
+  // Auth routes
+  app.post("/api/auth/login", (req, res) => {
+    const { email, password } = req.body as { email?: string; password?: string };
+    if (email === "admin333@gmail.com" && password === "snapsuuq321") {
+      (req.session as any).user = { role: "admin", email };
+      return res.json({ ok: true });
+    }
+    return res.status(401).json({ error: "Invalid credentials" });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if ((req.session as any).user) return res.json((req.session as any).user);
+    return res.status(401).json({ error: "Unauthorized" });
+  });
+
+  function requireAdmin(req: any, res: any, next: any) {
+    if (req.session?.user?.role === "admin") return next();
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // Public cargo endpoints
+  app.get("/api/cargo", async (req, res) => {
     try {
-      const statusFilter = req.query.status as string | undefined;
-      const shipments = await storage.getAllShipments(statusFilter);
-      res.json(shipments);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch shipments" });
+      const status = (req.query.status as string | undefined) || undefined;
+      const q = (req.query.q as string | undefined) || undefined;
+      const list = await storage.listCargo({ status, q });
+      res.json(list);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch cargo" });
     }
   });
 
-  app.get("/api/shipments/:id", async (req, res) => {
+  app.get("/api/cargo/:id", async (req, res) => {
     try {
-      const shipment = await storage.getShipment(req.params.id);
-      if (!shipment) {
-        return res.status(404).json({ error: "Shipment not found" });
-      }
-      res.json(shipment);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch shipment" });
+      const item = await storage.getCargo(req.params.id);
+      if (!item) return res.status(404).json({ error: "Not found" });
+      res.json(item);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch cargo" });
     }
   });
 
-  app.post("/api/shipments", async (req, res) => {
+  app.get("/api/stats", async (_req, res) => {
     try {
-      const validatedData = insertShipmentSchema.parse(req.body);
-      const shipment = await storage.createShipment(validatedData);
-      res.status(201).json(shipment);
-    } catch (error) {
-      if (error instanceof Error && error.name === "ZodError") {
-        return res.status(400).json({ error: "Invalid shipment data", details: error });
-      }
-      res.status(500).json({ error: "Failed to create shipment" });
+      const s = await storage.stats();
+      res.json(s);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
-  app.get("/api/shipments/:id/status-updates", async (req, res) => {
+  // Admin cargo management
+  app.post("/api/admin/cargo", requireAdmin, async (req, res) => {
     try {
-      const statusUpdates = await storage.getStatusUpdatesByShipmentId(req.params.id);
-      res.json(statusUpdates);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch status updates" });
+      const data = insertCargoSchema.parse(req.body);
+      const created = await storage.createCargo(data);
+      res.status(201).json(created);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ error: "Invalid data", details: e });
+      res.status(500).json({ error: "Failed to create cargo" });
     }
   });
 
-  app.post("/api/shipments/:id/status", async (req, res) => {
+  app.put("/api/admin/cargo/:id", requireAdmin, async (req, res) => {
     try {
-      const { status, notes } = req.body;
-      
-      if (!status) {
-        return res.status(400).json({ error: "Status is required" });
-      }
+      const updated = await storage.updateCargo(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch {
+      res.status(500).json({ error: "Failed to update cargo" });
+    }
+  });
 
-      const shipment = await storage.getShipment(req.params.id);
-      if (!shipment) {
-        return res.status(404).json({ error: "Shipment not found" });
-      }
+  app.delete("/api/admin/cargo/:id", requireAdmin, async (req, res) => {
+    try {
+      const ok = await storage.deleteCargo(req.params.id);
+      res.json({ ok });
+    } catch {
+      res.status(500).json({ error: "Failed to delete cargo" });
+    }
+  });
 
-      const updatedShipment = await storage.updateShipmentStatus(req.params.id, status);
-
-      const statusUpdateData = {
-        shipmentId: req.params.id,
-        status,
-        notes: notes || null,
-      };
-      
-      await storage.createStatusUpdate(statusUpdateData);
-
-      res.json(updatedShipment);
-    } catch (error) {
-      if (error instanceof Error && (
-        error.message.includes('Invalid status') || 
-        error.message.includes('Cannot move backwards') ||
-        error.message.includes('Cannot skip stages')
-      )) {
-        return res.status(400).json({ error: error.message });
-      }
-      res.status(500).json({ error: "Failed to update shipment status" });
+  app.post("/api/admin/cargo/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { status } = req.body as { status?: string };
+      if (!status) return res.status(400).json({ error: "Status is required" });
+      const updated = await storage.updateCargoStatus(req.params.id, status);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e: any) {
+      return res.status(400).json({ error: e?.message || "Failed to update status" });
     }
   });
 

@@ -5,17 +5,20 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
-import Dashboard from "@/pages/dashboard";
-import CreateShipment from "@/pages/create-shipment";
-import ShipmentDetail from "@/pages/shipment-detail";
+import PublicSearch from "@/pages/public-search";
+import AdminLogin from "@/pages/admin-login";
+import AdminDashboard from "@/pages/admin-dashboard";
+import CargoForm from "@/pages/cargo-form";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/create" component={CreateShipment} />
-      <Route path="/shipment/:id" component={ShipmentDetail} />
+      <Route path="/" component={PublicSearch} />
+      <Route path="/login" component={AdminLogin} />
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/add-cargo" component={CargoForm} />
+      <Route path="/edit-cargo/:id" component={CargoForm} />
       <Route component={NotFound} />
     </Switch>
   );
